@@ -1,0 +1,17 @@
+[build]
+  command = "echo 'Build complete'"  # 无构建步骤（纯静态+Serverless）
+  functions = "netlify/functions"   # 指定Serverless函数目录
+  publish = "."                     # 静态文件根目录
+
+[build.environment]
+  NODE_VERSION = "18"               # 指定Node版本（兼容Netlify，避免报错）
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Access-Control-Allow-Origin = "*"
+    Access-Control-Allow-Methods = "GET, POST, OPTIONS"
+    Access-Control-Allow-Headers = "Content-Type"
+
+[functions]
+  node_bundler = "esbuild"          # 优化函数构建速度
