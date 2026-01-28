@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIP视频解析与3D播放平台</title>
+    <!-- 外部资源（优化加载优先级，defer延迟加载不阻塞首屏） -->
+    <script src="https://cdn.tailwindcss.com" defer></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.8/dist/chart.umd.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/js/controls/OrbitControls.js" defer></script>
+    <!-- 本地样式 -->
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="bg-gray-900 text-white font-sans">
+    <header class="py-4 px-6 bg-gray-800/80 backdrop-blur sticky top-0 z-50 transition-all duration-300">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center space-x-2">
+                <i class="fa fa-film text-blue-400 text-2xl" aria-hidden="true"></i>
+                <h1 class="text-xl font-bold bg-gradient-to-r from-blue-400 to-purple-500 text-gradient">
+                    VIP视频解析与3D播放平台
+                </h1>
+            </div>
+            <nav class="hidden md:flex space-x-8">
+                <a href="#videos" class="hover:text-blue-400 transition-colors" aria-label="视频库">视频库</a>
+                <a href="#add-video" class="hover:text-blue-400 transition-colors" aria-label="添加视频">添加视频</a>
+                <a href="#parsers" class="hover:text-blue-400 transition-colors" aria-label="视频解析">视频解析</a>
+                <a href="#settings" class="hover:text-blue-400 transition-colors" aria-label="设置">设置</a>
+                <a href="#stats" class="hover:text-blue-400 transition-colors" aria-label="统计">统计</a>
+            </nav>
+            <button id="menu-toggle" class="md:hidden text-white" aria-expanded="false" aria-controls="mobile-menu" aria-label="打开菜单">
+                <i class="fa fa-bars text-xl" aria-hidden="true"></i>
+            </button>
+        </div>
+    </header>
+    
+    <!-- 移动端菜单 -->
+    <div id="mobile-menu" class="fixed top-0 right-0 w-64 h-full bg-gray-800 z-50 transform translate-x-full transition-transform duration-300 md:hidden" aria-hidden="true">
+        <div class="p-6">
+            <button id="close-menu" class="text-white mb-6" aria-label="关闭菜单">
+                <i class="fa fa-times text-xl" aria-hidden="true"></i>
+            </button>
+            <nav class="flex flex-col space-y-4">
+                <a href="#videos" class="hover:text-blue-400 transition-colors py-2 border-b border-gray-700 mobile-link" aria-label="视频库">视频库</a>
+                <a href="#add-video" class="hover:text-blue-400 transition-colors py-2 border-b border-gray-700 mobile-link" aria-label="添加视频">添加视频</a>
+                <a href="#parsers" class="hover:text-blue-400 transition-colors py-2 border-b border-gray-700 mobile-link" aria-label="视频解析">视频解析</a>
+                <a href="#settings" class="hover:text-blue-400 transition-colors py-2 border-b border-gray-700 mobile-link" aria-label="设置">设置</a>
+                <a href="#stats" class="hover:text-blue-400 transition-colors py-2 mobile-link" aria-label="统计">统计</a>
+            </nav>
+        </div>
+    </div>
+    
+    <!-- 遮罩层 - 移动端菜单打开时显示 -->
+    <div id="menu-overlay" class="fixed inset-0 bg-black/50 z-40 hidden md:hidden" aria-hidden="true"></div>
+    
+    <!-- 批量操作工具栏 -->
+    <div id="batch-toolbar" class="batch-toolbar hidden">
+        <span id="batch-selected-count">已选择 0 个视频</span>
+        <button id="batch-play" class="btn-3d bg-blue-600 hover:bg-blue-700 text-sm">
+            <i class="fa fa-play mr-1" aria-hidden="true"></i> 批量播放
+        </button>
+        <button id="batch-delete" class="btn-3d bg-red-600 hover:bg-red-700 text-sm">
+            <i class="fa fa-trash mr-1" aria-hidden="true"></i> 批量删除
+        </button>
+        <button id="batch-cancel" class="btn-3d bg-gray-600 hover:bg-gray-700 text-sm">
+            <i class="fa fa-times mr-1" aria-hidden="true"></i> 取消选择
+        </button>
+    </div>
+    
+    <!-- 视频播放模态框 -->
+    <div id="video-player-modal" class="modal fixed inset-0 z-[9999] flex items-center justify-center hidden" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="modal-backdrop absolute inset-0 bg-black/80" tabindex="-1"></div>
+        <div class="modal-content relative w-full max-w-5xl mx-4 rounded-xl overflow-hidden modal-enter" role="document">
+            <button class="close-video absolute top-4 right-4 text-white bg-black/50 hover:bg-black/70 w-10 h-10 rounded-full flex items-center justify-center transition-all z-10" aria-label="关闭视频播放">
+                <i class="fa fa-times" aria-hidden="true"></i>
+            </button>
+            <div class="aspect-video w-full bg-black relative">
+                <div id="normal-player-loading" class="loader-overlay hidden">
+                    <div class="loader"></div>
+                </div>
+                <iframe id="fullscreen-video" class="w-full h-full" src="" title="视频播放" frameborder="0" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowfullscreen></iframe>
+            </div>
+            <div class="p-6 bg-gray-800">
+                <div class="flex justify-between items-start mb-4">
+                    <div>
+                        <h2 id="fullscreen-video-title" class="text-xl font-bold mb-2"></h2>
+                        <p id="fullscreen-video-description" class="text-gray-400"></p>
+                    </div>
+                    <a id="original-link-btn" href="#" target="_blank" class="btn-3d bg-gray-700 hover:bg-gray-600 text-sm" aria-label="查看原链接">
+                        <i class="fa fa-external-link mr-1" aria-hidden="true"></i> 原链接
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- VIP解析播放模态框 -->
+    <div id="vip-player-modal" class="modal fixed inset-0 z-[9998] flex items-center justify-center hidden" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="modal-backdrop absolute inset-0 bg-black/80" tabindex="-1"></div>
+        <div class="modal-content relative w-full max-w-5xl mx-4 rounded-xl overflow-hidden modal-enter" role="document">
+            <button class="close-vip-player absolute top-4 right-4 text-white bg-black/50 hover:bg-black/70 w-10 h-10 rounded-full flex items-center justify-center transition-all z-10" aria-label="关闭VIP视频播放">
+                <i class="fa fa-times" aria-hidden="true"></i>
+            </button>
+            <div class="aspect-video w-full bg-black relative">
+                <div id="vip-player-loading" class="loader-overlay">
+                    <div class="loader"></div>
+                    <p class="mt-4 text-gray-300">正在加载视频...</p>
+                </div>
+                <div id="vip-player-container" class="video-player-container hidden">
+                    <video id="fallback-video-player" class="w-full h-full" controls>
+                        <source id="fallback-video-source" type="video/mp4">
+                        您的浏览器不支持视频播放
+                    </video>
+                </div>
+                <iframe id="vip-video-player" class="w-full h-full" src="" title="VIP视频播放" frameborder="0" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowfullscreen></iframe>
+                <div id="vip-player-error" class="loader-overlay hidden">
+                    <div class="text-center">
+                        <i class="fa fa-exclamation-triangle text-4xl text-yellow-500 mb-4"></i>
+                        <p class="text-xl mb-2">播放失败</p>
+                        <p class="text-gray-400 mb-4">尝试切换解析接口或视频质量</p>
+                        <button id="retry-vip-play" class="btn-3d bg-blue-600 hover:bg-blue-700">
+                            <i class="fa fa-refresh mr-2"></i>重试播放
+                        </button>
+                        <button id="use-fallback-player" class="btn-3d bg-green-600 hover:bg-green-700 mt-2">
+                            <i class="fa fa-video-camera mr-2"></i>使用备用播放器
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 bg-gray-800">
+                <div class="flex flex-wrap justify-between items-start gap-4 mb-4">
+                    <div>
+                        <h2 id="vip-video-title" class="text-xl font-bold"></h2>
+                    </div>
+                    <div class="flex space-x-2">
+                        <div class="quality-selector">
+                            <button class="quality-btn active" data-quality="1080">1080P</button>
+                            <button class="quality-btn" data-quality="720">720P</button>
+                            <button class="quality-btn" data-quality="480">480P</button>
+                            <button class="quality-btn" data-quality="360">360P</button>
+                        </div>
+                        <a id="vip-original-link" href="#" target="_blank" class="btn-3d bg-gray-700 hover:bg-gray-600 text-sm" aria-label="查看原链接">
+                            <i class="fa fa-external-link mr-1" aria-hidden="true"></i> 原链接
+                        </a>
+                        <button id="download-vip-btn" class="btn-3d bg-green-600 hover:bg-green-700 text-sm" aria-label="下载VIP视频">
+                            <i class="fa fa-download mr-1" aria-hidden="true"></i> 下载视频
+                        </button>
+                    </div>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-sm font-medium mb-2">解析接口</label>
+                    <div id="vip-parser-buttons" class="flex flex-wrap gap-2">
+                        <button class="line-option active" data-parser="parser1">解析线路1</button>
+                        <button class="line-option" data-parser="parser2">解析线路2</button>
+                        <button class="line-option" data-parser="parser3">解析线路3</button>
+                    </div>
+                </div>
+                <div id="vip-video-info" class="text-gray-400 text-sm">
+                    解析状态：<span class="parser-status status-active"></span> 接口正常 | 视频大小：<span id="video-size">--</span>
+                </div>
+                <div id="download-hint" class="mt-4 p-3 bg-blue-900/30 rounded-lg text-sm text-blue-300 hidden">
+                    <i class="fa fa-info-circle mr-2"></i>提示：右键视频画面选择"视频另存为"或使用IDM等下载工具
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- 视频编辑模态框 -->
+    <div id="edit-video-modal" class="modal fixed inset-0 z-[9997] flex items-center justify-center hidden" aria-hidden="true" role="dialog" aria-modal="true">
+        <div class="modal-backdrop absolute inset-0 bg-black/80" tabindex="-1"></div>
+        <div class="modal-content relative w-full max-w-2xl mx-4 rounded-xl overflow-hidden bg-gray-800 modal-enter" role="document">
+            <div class="p-6">
+                <div class="flex justify-between items-center mb-6">
+                    <h2 class="text-xl font-bold">编辑视频信息</h2>
+                    <button class="close-edit-video text-gray-400 hover:text-white" aria-label="关闭编辑">
+                        <i class="fa fa-times text-xl" aria-hidden="true"></i>
+                    </button>
+                </div>
+                <form id="edit-video-form">
+                    <input type="hidden" id="edit-video-id">
+                    <div class="space-y-4">
+                        <div>
+                            <label for="edit-video-title" class="block mb-2">视频标题</label>
+                            <input type="text" id="edit-video-title" class="form-input" required>
+                        </div>
+                        <div>
+                            <label for="edit-video-url" class="block mb-2">视频链接</label>
+                            <input type="url" id="edit-video-url" class="form-input" required>
+                        </div>
+                        <div>
+                            <label for="edit-video-category" class="block mb-2">视频分类</label>
+                            <select id="edit-video-category" class="form-input">
+                                <option value="education">教育</option>
+                                <option value="entertainment">娱乐</option>
+                                <option value="technology">科技</option>
+                                <option value="music">音乐</option>
+                                <option value="sports">体育</option>
+                                <option value="vip">VIP视频</option>
+                                <option value="movie">电影</option>
+                                <option value="tv">电视剧</option>
+                                <option value="anime">动漫</option>
+                                <option value="documentary">纪录片</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="edit-video-description" class="block mb-2">视频描述</label>
+                            <textarea id="edit-video-description" class="form-input" rows="3"></textarea>
+                        </div>
+                        <div class="flex items-center">
+                            <input type="checkbox" id="edit-video-is-vip" class="mr-2 h-5 w-5 text-blue-500 rounded">
+                            <label for="edit-video-is-vip" class="cursor-pointer">标记为VIP视频</label>
+                        </div>
+                    </div>
+                    <div class="flex justify-end space-x-3 mt-6">
+                        <button type="button" class="close-edit-video btn-3d bg-gray-700 hover:bg-gray-600">取消</button>
+                        <button type="submit" class="btn-3d bg-blue-600 hover:bg-blue-700">保存更改</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <main>
+        <!-- 视频库区域 -->
+        <section id="videos" class="px-6 py-16 bg-gradient-to-b from-gray-900 to-gray-800">
+            <div class="max-w-7xl mx-auto">
+                <h2 class="text-3xl md:text-4xl font-bold mb-12 text-center">
+                    我的<span class="text-blue-400">视频库</span>
+                </h2>
+                
+                <div class="mb-8 flex justify-between items-center flex-wrap gap-4">
+                    <h3 class="text-xl font-semibold">视频列表</h3>
+                    <div class="flex gap-2 flex-wrap">
+                        <button id="batch-select-btn" class="btn-3d bg-blue-600 hover:bg-blue-700 text-sm">
+                            <i class="fa fa-check-square mr-1" aria-hidden="true"></i> 批量选择
+                        </button>
+                        <button id="filter-free-btn" class="btn-3d bg-green-600 hover:bg-green-700 text-sm" aria-label="筛选免费视频">
+                            <i class="fa fa-unlock mr-1" aria-hidden="true"></i> 免费视频
+                        </button>
+                        <button id="filter-vip-btn" class="btn-3d bg-purple-600 hover:bg-purple-700 text-sm" aria-label="筛选VIP视频">
+                            <i class="fa fa-lock mr-1" aria-hidden="true"></i> VIP视频
+                        </button>
+                        <button id="filter-all-btn" class="btn-3d bg-gray-700 hover:bg-gray-600 text-sm active" aria-label="显示所有视频">
+                            <i class="fa fa-list mr-1" aria-hidden="true"></i> 全部
+                        </button>
+                        <button id="add-video-btn" class="btn-3d bg-green-600 hover:bg-green-700">
+                            <i class="fa fa-plus mr-2" aria-hidden="true"></i> 添加视频
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- 视频列表视图切换 -->
+                <div class="mb-6 flex gap-2">
+                    <button id="view-grid" class="btn-3d bg-blue-600 hover:bg-blue-700 text-sm active" data-view="grid">
+                        <i class="fa fa-th-large mr-1"></i> 网格视图
+                    </button>
+                    <button id="view-list" class="btn-3d bg-gray-700 hover:bg-gray-600 text-sm" data-view="list">
+                        <i class="fa fa-list mr-1"></i> 列表视图
+                    </button>
+                    <button id="view-table" class="btn-3d bg-gray-700 hover:bg-gray-600 text-sm" data-view="table">
+                        <i class="fa fa-table mr-1"></i> 表格视图
+                    </button>
+                </div>
+                
+                <!-- 网格视图 -->
+                <div id="video-grid-view" class="video-view">
+                    <div id="video-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                        <!-- 视频由JS动态生成 -->
+                    </div>
+                </div>
+                
+                <!-- 表格视图 -->
+                <div id="video-table-view" class="video-view hidden">
+                    <div class="glass-dark rounded-xl overflow-hidden">
+                        <table class="video-table">
+                            <thead>
+                                <tr>
+                                    <th class="w-12"><input type="checkbox" id="select-all" class="h-4 w-4 text-blue-500 rounded"></th>
+                                    <th>标题</th>
+                                    <th>平台</th>
+                                    <th>分类</th>
+                                    <th>类型</th>
+                                    <th>添加时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="video-table-body">
+                                <!-- 表格行由JS动态生成 -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                
+                <!-- 空状态提示 -->
+                <div id="empty-video-state" class="hidden py-16 text-center">
+                    <i class="fa fa-film text-6xl text-gray-700 mb-4"></i>
+                    <p class="text-gray-500 text-lg">视频库还是空的</p>
+                    <p class="text-gray-400 mb-6">添加你的第一个视频开始使用吧</p>
+                    <button id="empty-add-video-btn" class="btn-3d bg-blue-600 hover:bg-blue-700">
+                        <i class="fa fa-plus mr-2"></i>添加视频
+                    </button>
+                </div>
+            </div>
+        </section>
+        
+        <!-- 添加视频区域 -->
+        <section id="add-video" class="px-6 py-16 bg-gradient-to-b from-gray-800 to-gray-900">
+            <div class="max-w-7xl mx-auto">
+                <h2 class="text-3xl md:text-4xl font-bold mb-12 text-center">
+                    添加<span class="text-green-400">视频</span>
+                </h2>
+                
+                <div class="glass-dark rounded-xl p-6">
+                    <h3 class="text-xl font-semibold mb-4">添加新视频</h3>
+                    <form id="add-video-form" novalidate>
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label for="video-title" class="block mb-2">视频标题 <span class="text-red-500">*</span></label>
+                                <input type="text" id="video-title" class="form-input" placeholder="输入视频标题" required>
+                                <p class="error-message text-red-500 text-sm mt-1 hidden">请输入视频标题</p>
+                            </div>
+                            <div>
+                                <label for="video-url" class="block mb-2">视频链接 <span class="text-red-500">*</span></label>
+                                <input type="url" id="video-url" class="form-input" placeholder="输入视频链接" required>
+                                <p class="error-message text-red-500 text-sm mt-1 hidden">请输入有效的视频链接</p>
+                            </div>
+                            <div>
+                                <label for="video-category" class="block mb-2">视频分类</label>
+                                <select id="video-category" class="form-input">
+                                    <option value="education">教育</option>
+                                    <option value="entertainment">娱乐</option>
+                                    <option value="technology">科技</option>
+                                    <option value="music">音乐</option>
+                                    <option value="sports">体育</option>
+                                    <option value="movie">电影</option>
+                                    <option value="tv">电视剧</option>
+                                    <option value="anime">动漫</option>
+                                    <option value="documentary">纪录片</option>
+                                    <option value="vip">VIP视频</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="video-duration" class="block mb-2">视频时长</label>
+                                <input type="text" id="video-duration" class="form-input" placeholder="例如: 45分钟">
+                            </div>
+                        </div>
+                        <div class="mt-6">
+                            <label for="video-description" class="block mb-2">视频描述</label>
+                            <textarea id="video-description" class="form-input" rows="3" placeholder="输入视频描述"></textarea>
+                        </div>
+                        <div class="mt-4">
+                            <div class="flex items-center mb-4">
+                                <input type="checkbox" id="auto-detect-vip" class="mr-2 h-5 w-5 text-blue-500 rounded" checked>
+                                <label for="auto-detect-vip" class="cursor-pointer">自动检测VIP视频</label>
+                                <button type="button" id="manual-detect-vip" class="ml-4 text-sm text-blue-400 hover:text-blue-300">手动检测</button>
+                            </div>
+                            <div id="vip-detection-result" class="hidden p-3 bg-gray-700/50 rounded-lg mb-4">
+                                <p class="text-sm"><span id="vip-status-icon" class="mr-2"></span><span id="vip-status-text"></span></p>
+                            </div>
+                        </div>
+                        <div class="mt-6 flex justify-end">
+                            <button type="submit" class="btn-3d bg-blue-600 hover:bg-blue-700">
+                                <i class="fa fa-save mr-2"></i>添加视频
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </section>
+
+        <!-- 视频解析专区 -->
+        <section id="parsers" class="px-6 py-16 bg-gradient-to-b from-gray-900 to-gray-800">
+            <div class="max-w-7xl mx-auto">
+                <h2 class="text-3xl md:text-4xl font-bold mb-12 text-center">
+                    <span class="text-purple-400">视频解析</span>工具
+                </h2>
+                <div class="glass-dark rounded-xl p-6">
+                    <div class="radio-container">
+                        <div class="radio-item active" data-parser-type="vip">
+                            <div class="radio-dot active"></div>
+                            <span class="radio-text">VIP视频解析</span>
+                        </div>
+                        <div class="radio-item" data-parser-type="normal">
+                            <div class="radio-dot"></div>
+                            <span class="radio-text">普通视频解析</span>
+                        </div>
+                        <div class="radio-item" data-parser-type="3d">
+                            <div class="radio-dot"></div>
+                            <span class="radio-text">3D播放模式</span>
+                        </div>
+                    </div>
+                    <div class="input-container mt-6">
+                        <input type="url" id="parser-video-url" class="form-input flex-1" placeholder="输入视频链接（支持B站/爱奇艺/腾讯/优酷等）" required>
+                        <button id="analyze-btn" class="btn-analyze">
+                            <i class="fa fa-magic mr-2"></i>立即解析
+                        </button>
+                    </div>
+                    <div class="parse-progress mt-6 hidden">
+                        <div class="parse-progress-bar" style="width: 0%"></div>
+                    </div>
+                    <div id="parse-result" class="mt-6 hidden">
+                        <h4 class="text-lg font-semibold mb-4">解析结果</h4>
+                        <div id="parse-result-list"></div>
+                    </div>
+                    <div id="parse-error" class="mt-6 hidden p-3 bg-red-900/30 rounded-lg text-red-400">
+                        <i class="fa fa-exclamation-circle mr-2"></i><span id="parse-error-text"></span>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 底部 -->
+    <footer class="px-6 py-8 bg-gray-800/80 backdrop-blur mt-16">
+        <div class="max-w-7xl mx-auto text-center text-gray-400 text-sm">
+            <p>© 2024 VIP视频解析与3D播放平台 | 仅用于学习交流，请勿用于商业用途</p>
+            <p class="mt-2">支持平台：B站、爱奇艺、腾讯视频、优酷、YouTube等</p>
+        </div>
+    </footer>
+
+    <!-- 核心JS（延迟加载，优化首屏） -->
+    <script src="js/main.js" defer></script>
+</body>
+</html>
